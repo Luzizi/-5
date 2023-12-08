@@ -1,0 +1,80 @@
+#include <iostream>
+#include <fstream>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+using namespace std;
+
+int main(int argc, char *argv[]) {
+    if (argc < 5) //检查参数是否足够
+    {
+        cerr << "Usage: " << argv[0] << " <serverIP> <serverPort> <fileToSend> <packetSize>" << endl;
+        return 1;
+    }
+
+    //获取ip，端口号，要发送的文件名和数据包大小
+    //argv用于存储命令行参数，atoi用于将字符串转换为整数
+    const char *serverIP = argv[1];
+    const int serverPort = atoi(argv[2]);
+    const char *fileName = argv[3];
+    const int packetSize = atoi(argv[4]);
+
+    // 创建UDPsocket,创建失败则输出错误信息并终止程序
+    int clientSocket = socket(AF_INET, SOCK_DGRAM, 0);//采用ipv4协议，udp socket，使用默认协议
+    if (clientSocket == -1) {
+        cerr << "Error creating socket" << endl;
+        return 1;
+    }
+
+    // 配置服务器地址
+    sockaddr_in serverAddr;//创建sockaddr_in结构体，存储服务器地址信息
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = inet_addr(serverIP);
+    serverAddr.sin_port = htons(serverPort);
+
+    // 打开文件以读取
+    ifstream fileToSend(fileName, ios::in | ios::binary);
+    if (!fileToSend.is_open()) {
+        cerr << "Error opening file for reading" << endl;
+        close(clientSocket);
+        return 1;
+    }
+
+    // 发送文件内容
+    char buffer[packetSize];
+    while (!fileToSend.eof()) {
+        fileToSend.read(buffer, packetSize);
+        ssize_t bytesRead = fileToSend.gcount();
+
+        ssize_t sent = sendto(clientSocket, buffer, bytesRead, 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+
+        if (sent != bytesRead) {
+            cerr << "Error sending file" << endl;
+            fileToSend.close();
+            close(clientSocket);
+            return 1;
+        }
+    }
+
+    // 发送一个空数据包表示文件传输完成
+    ssize_t sent = sendto(clientSocket, "", 0, 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    if (sent == -1) {
+        cerr << "Error sending file completion signal" << endl;
+        fileToSend.close();
+        close(clientSocket);
+        return 1;
+    }
+
+    cout << "File sent successfully" << endl;
+
+    // 关闭套接字和文件
+    fileToSend.close();
+    close(clientSocket);
+
+    return 0;
+}
+
+ https://github.com/Luzizi/-5.git 

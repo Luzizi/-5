@@ -1,0 +1,105 @@
+//创立DatagramSocket对象
+//将数据进行packet封装，指定目的地地址和端口
+//将包发出
+//将socket关闭
+
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+using namespace std;
+
+int main(int argc, char *argv[]) {
+    //如果参数数量不是3,(程序名称、服务器IP和服务器端口号，输出使用说明并终止程序。
+    if (argc != 3) {
+        cerr << "Usage: " << argv[0] << " <serverIP> <serverPort>" << endl;
+        return 1;//返回错误码
+    }
+
+    //将命令型参数中的ip和服务器端口号提取出来
+    //argv用于存储命令行参数，atoi用于将字符串转换为整数
+    const char *serverIP = argv[1];
+    const int serverPort = atoi(argv[2]);
+
+    //创建udp socket,创建失败则输出错误信息并终止程序
+    int serverSocket = socket(AF_INET, SOCK_DGRAM, 0);//采用ipv4协议，udp socket，使用默认协议
+    if (serverSocket == -1) {
+        cerr << "Error creating socket" << endl;
+        return 1;
+    }
+
+    // 配置服务器地址
+    sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));//初始化，清空先前的地址信息
+    serverAddr.sin_family = AF_INET;//使用ipv4协议
+    serverAddr.sin_addr.s_addr = inet_addr(serverIP);//传入ip地址，返回一个无符号长整数型
+    serverAddr.sin_port = htons(serverPort);//从字节顺序转换为网络字节顺序
+
+    //将serverSocket绑定到服务器地址,地址信息存储到serverAddr结构体中，绑定失败则输出错误信息，关闭socket并终止程序
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+    //使用bin函数绑定ip和端口号
+    //将serverAddr结构体类型的地址转换为通用的struct sockaddr类型的指针
+        cerr << "Error binding socket" << endl;
+        close(serverSocket);
+        return 1;
+    }
+
+    cout << serverIP << ":" << serverPort << endl;//输出服务器正在监听地址的信息
+
+    
+    //接受从client端发送来的文件名，并将其存储在filename中
+    char buffer[1000];//缓冲区
+    memset(buffer, 0, sizeof(buffer));//初始化数组，清空以前的数据
+    socklen_t clientAddrLen = sizeof(serverAddr);//存储client端地址长度
+    ssize_t received = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&serverAddr, &clientAddrLen);
+    //使用recvfrom函数接收数据，将数据存储在数组中
+    //检查是否接收成功
+    if (received == -1) {
+        cerr << "Error receiving file name" << endl;
+        close(serverSocket);
+        return 1;
+    }
+
+    string fileName(buffer);//将数组转化为字符串类型
+
+    // 打开文件以写入
+    ofstream outputFile(fileName, ios::out | ios::binary);//打开文件
+    if (!outputFile.is_open()) {
+        cerr << "Error opening file for writing" << endl;
+        close(serverSocket);
+        return 1;
+    }
+
+    // 接收并写入文件内容
+    while (true) {
+        memset(buffer, 0, sizeof(buffer));
+        //从socket接收数据，并存储在数组中
+        received = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&serverAddr, &clientAddrLen);
+
+        if (received == -1) {
+            cerr << "Error receiving file content" << endl;
+            break;
+        }
+
+        if (received == 0) {
+            // 文件传输完成
+            break;
+        }
+
+        outputFile.write(buffer, received);//将接收到的数据写入文件
+    }
+
+    cout << "File transfer complete" << endl;//输出文件传输完成
+
+    // 关闭套接字和文件
+    close(serverSocket);
+    outputFile.close();
+
+    return 0;
+}
+
+ https://github.com/Luzizi/-5.git 
